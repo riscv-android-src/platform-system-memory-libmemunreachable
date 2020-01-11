@@ -40,13 +40,6 @@ cc_library {
         "libc_malloc_debug_backtrace",
         "libprocinfo",
     ],
-    // Only need this for arm since libc++ uses its own unwind code that
-    // doesn't mix with the other default unwind code.
-    arch: {
-        arm: {
-            static_libs: ["libunwind_llvm"],
-        },
-    },
     export_include_dirs: ["include"],
     local_include_dirs: ["include"],
     version_script: "libmemunreachable.map",
