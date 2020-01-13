@@ -29,11 +29,20 @@
 #include "log.h"
 
 namespace android {
+static inline uintptr_t UntagAddress(uintptr_t addr) {
+#if defined(__aarch64__)
+  constexpr uintptr_t mask = (static_cast<uintptr_t>(1) << 56) - 1;
+  addr = addr & mask;
+#endif
+  return addr;
+}
 
 bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   if (end == begin) {
     end = begin + 1;
   }
+  begin = UntagAddress(begin);
+  end = UntagAddress(end);
   Range range{begin, end};
   if (valid_mappings_range_.end != 0 &&
       (begin < valid_mappings_range_.begin || end > valid_mappings_range_.end)) {
@@ -72,6 +81,7 @@ bool HeapWalker::WordContainsAllocationPtr(uintptr_t word_ptr, Range* range, All
   // for example mprotect(PROT_NONE) on a native heap page.  If so, it will be
   // caught and handled by mmaping a zero page over the faulting page.
   uintptr_t value = ReadWordAtAddressUnsafe(word_ptr);
+  value = UntagAddress(value);
   walking_ptr_ = 0;
   if (value >= valid_allocations_range_.begin && value < valid_allocations_range_.end) {
     AllocationMap::iterator it = allocations_.find(Range{value, value + 1});
