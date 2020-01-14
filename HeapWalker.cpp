@@ -16,8 +16,11 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <sys/auxv.h>
 #include <sys/mman.h>
 #include <unistd.h>
+
+#include <bionic/mte_kernel.h>
 
 #include <map>
 #include <utility>
@@ -29,11 +32,20 @@
 #include "log.h"
 
 namespace android {
+static inline uintptr_t UntagAddress(uintptr_t addr) {
+#if defined(__aarch64__)
+  constexpr uintptr_t mask = (static_cast<uintptr_t>(1) << 56) - 1;
+  addr = addr & mask;
+#endif
+  return addr;
+}
 
 bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   if (end == begin) {
     end = begin + 1;
   }
+  begin = UntagAddress(begin);
+  end = UntagAddress(end);
   Range range{begin, end};
   if (valid_mappings_range_.end != 0 &&
       (begin < valid_mappings_range_.begin || end > valid_mappings_range_.end)) {
@@ -59,11 +71,32 @@ bool HeapWalker::Allocation(uintptr_t begin, uintptr_t end) {
   }
 }
 
-// Sanitizers may consider certain memory inaccessible through certain pointers.
-// With MTE this will need to use unchecked instructions or disable tag checking globally.
+// Sanitizers and MTE may consider certain memory inaccessible through certain pointers.
+// With MTE we set PSTATE.TCO during the access to suppress tag checks.
 static uintptr_t ReadWordAtAddressUnsafe(uintptr_t word_ptr)
     __attribute__((no_sanitize("address", "hwaddress"))) {
-  return *reinterpret_cast<uintptr_t*>(word_ptr);
+#if defined(__aarch64__)
+#if defined(ANDROID_EXPERIMENTAL_MTE)
+  static bool mte = getauxval(AT_HWCAP2) & HWCAP2_MTE;
+#else
+  static bool mte = false;
+#endif
+  if (mte) {
+    // Disable tag checks.
+    __asm__ __volatile__(".arch_extension mte; msr tco, #1");
+  }
+#endif
+
+  // Load a word from memory without ASAN/HWASAN/MTE checks.
+  uintptr_t retval = *reinterpret_cast<uintptr_t*>(word_ptr);
+
+#if defined(__aarch64__)
+  if (mte) {
+    // Re-enable tag checks.
+    __asm__ __volatile__(".arch_extension mte; msr tco, #0");
+  }
+#endif
+  return retval;
 }
 
 bool HeapWalker::WordContainsAllocationPtr(uintptr_t word_ptr, Range* range, AllocationInfo** info) {
@@ -72,6 +105,7 @@ bool HeapWalker::WordContainsAllocationPtr(uintptr_t word_ptr, Range* range, All
   // for example mprotect(PROT_NONE) on a native heap page.  If so, it will be
   // caught and handled by mmaping a zero page over the faulting page.
   uintptr_t value = ReadWordAtAddressUnsafe(word_ptr);
+  value = UntagAddress(value);
   walking_ptr_ = 0;
   if (value >= valid_allocations_range_.begin && value < valid_allocations_range_.end) {
     AllocationMap::iterator it = allocations_.find(Range{value, value + 1});
