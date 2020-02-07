@@ -117,5 +117,8 @@ cc_test {
         "libhidlbase",
         "libutils",
     ],
-    test_suites: ["device-tests"],
+    test_suites: [
+        "device-tests",
+        "vts-core"
+    ],
 }
