@@ -252,7 +252,8 @@ bool MemUnreachable::ClassifyMappings(const allocator::vector<Mapping>& mappings
       // .rodata or .data section
       globals_mappings.emplace_back(*it);
     } else if (mapping_name == "[anon:libc_malloc]" ||
-               android::base::StartsWith(mapping_name, "[anon:scudo:")) {
+               android::base::StartsWith(mapping_name, "[anon:scudo:") ||
+               android::base::StartsWith(mapping_name, "[anon:GWP-ASan")) {
       // named malloc mapping
       heap_mappings.emplace_back(*it);
     } else if (has_prefix(mapping_name, "[anon:dalvik-")) {
