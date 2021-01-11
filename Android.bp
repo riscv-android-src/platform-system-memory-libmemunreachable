@@ -14,19 +14,9 @@ cc_defaults {
         android: {
             static_libs: ["libasync_safe"],
             header_libs: ["bionic_libc_platform_headers"],
-            product_variables: {
-                experimental_mte: {
-                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
-                },
-            },
         },
         linux_bionic: {
             header_libs: ["bionic_libc_platform_headers"],
-            product_variables: {
-                experimental_mte: {
-                    cflags: ["-DANDROID_EXPERIMENTAL_MTE"],
-                },
-            },
         },
         host: {
             shared_libs: ["liblog"],
